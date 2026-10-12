@@ -1,5 +1,5 @@
 import { escapeHtml, inquiryBadge } from '../dom.js'
-import { getCustomer, getInquiry, spawnInquiry, toggleFollowup } from '../store.js'
+import { advanceClock, clockDate, getCustomer, getInquiry, spawnInquiry, toggleFollowup } from '../store.js'
 
 export function renderDashboard(state) {
   const open = state.inquiries.filter((i) =>
@@ -18,13 +18,17 @@ export function renderDashboard(state) {
         <h2>今日待办</h2>
         <p class="sub">问清 → 报价 → 出 PI → 30% 定金 → 排产单据 → 70% 尾款关档。</p>
       </div>
-      <button type="button" class="btn" data-spawn ${leftover ? '' : 'disabled'}>来一封新询盘</button>
+      <div class="actions">
+        <p class="sub">练习日 ${escapeHtml(clockDate(state))}</p>
+        <button type="button" class="ghost" data-advance>推进一天</button>
+        <button type="button" class="btn" data-spawn ${leftover ? '' : 'disabled'}>来一封新询盘</button>
+      </div>
     </header>
     <section class="stats">
       <article class="stat"><b>${open.length}</b><span>未了结询盘</span></article>
       <article class="stat"><b>${unread}</b><span>未读买家回复</span></article>
       <article class="stat"><b>${follow.length}</b><span>待跟进</span></article>
-      <article class="stat"><b>${waitingPi}</b><span>等定金 / 履约</span></article>
+      <article class="stat"><b>${waitingPi}</b><span>等定金 / 排产</span></article>
     </section>
     <section class="grid-2">
       <article class="panel">
@@ -66,7 +70,7 @@ export function renderDashboard(state) {
       <ol>
         <li>打开询盘，在对话里问数量、港口、认证、包装、付款，等对方回再报价。</li>
         <li>选工厂 A，按柜型报 FOB / CIF；不够一柜不要套整柜 CIF。</li>
-        <li>谈妥后出 PI，记 30% 定金，再去「履约」出 CI/PL、提单副本，记 70% 尾款。</li>
+        <li>谈妥后出 PI，记 30% 定金，排产先确认彩盒，再出 CI/PL、提单副本，记 70% 尾款关档。</li>
         <li>看复盘打分：是否先问清、是否拒 DDP、小单是否乱报 CIF。</li>
       </ol>
     </article>
@@ -79,6 +83,10 @@ export function bindDashboard(state, renderApp) {
       toggleFollowup(state, el.getAttribute('data-toggle-follow'))
       renderApp()
     })
+  })
+  document.querySelector('[data-advance]')?.addEventListener('click', () => {
+    advanceClock(state)
+    renderApp()
   })
   document.querySelector('[data-spawn]')?.addEventListener('click', () => {
     const inquiry = spawnInquiry(state)

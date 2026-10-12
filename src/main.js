@@ -12,8 +12,8 @@ let state = loadState()
 const NAV = [
   { hash: '#/today', id: 'today', label: '今日' },
   { hash: '#/inquiries', id: 'inquiries', label: '来信' },
-  { hash: '#/quotes', id: 'quotes', label: '报价' },
-  { hash: '#/ship', id: 'ship', label: '履约' },
+  { hash: '#/quotes', id: 'quotes', label: '看价' },
+  { hash: '#/ship', id: 'ship', label: '排产' },
   { hash: '#/customers', id: 'customers', label: '客户' },
   { hash: '#/cost', id: 'cost', label: '成本' },
 ]

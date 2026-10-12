@@ -1,4 +1,34 @@
-const PRODUCT_ID = 'p-ks304'
+export const PRODUCT_ID = 'p-ks304'
+export const PRODUCT_201 = 'p-ks201'
+
+export const EXTRA_PRODUCTS = [
+  {
+    id: PRODUCT_201,
+    sku: 'KS-201-6',
+    name: '6 件套 201 不锈钢厨具（练习对照货号）',
+    material: 'SUS201，表价更低，德国大货不要当主供',
+    packing: 'PE 袋 + 旧款彩盒，12 套/箱',
+    cbmPerSet: 0.0038,
+    setsPerCarton: 12,
+    moq: 1200,
+    cert: '报告可能套用，不是本货号',
+  },
+]
+
+export const EXTRA_FACTORIES = [
+  {
+    id: 'f-c',
+    name: '永康 201 线工厂 C',
+    productId: PRODUCT_201,
+    exw: 3.55,
+    inlandPerSet: 0.16,
+    docsPerSet: 0.04,
+    leadDays: 20,
+    lfgb: false,
+    recommended: true,
+    notes: '便宜。只能练对照价，不要当德国 304 主供。',
+  },
+]
 
 /** @type {Array<Record<string, unknown>>} */
 export const ROSTER = [
@@ -16,7 +46,7 @@ export const ROSTER = [
   { id: 'c-metal', name: 'Alpen Metaltex AG', country: '瑞士', city: 'Zurich', channel: '金属厨房件', persona: 'accept', port: 'Hamburg', fullContainer: true, cert: 'LFGB', notes: 'FOB 条款清楚即可。' },
   { id: 'c-ae', name: 'Gulf Kitchen Trading', country: '阿联酋', city: 'Dubai', channel: '湾区批发', persona: 'large_me', port: 'Jebel Ali', fullContainer: true, cert: 'FDA', notes: '量大，不太啃 DDP。' },
   { id: 'c-sa', name: 'Riyadh Housewares Co.', country: '沙特', city: 'Riyadh', channel: '商超进口', persona: 'large_me', port: 'Jeddah', fullContainer: true, cert: 'FDA', notes: '要整柜，交期可谈。' },
-  { id: 'c-pl', name: 'Warsaw Kitchen Sp. z o.o.', country: '波兰', city: 'Warsaw', channel: '中欧批发', persona: 'bargain', port: 'Gdansk', fullContainer: true, cert: 'LFGB', notes: '预算紧。' },
+  { id: 'c-pl', name: 'Warsaw Kitchen Sp. z o.o.', country: '波兰', city: 'Warsaw', channel: '中欧批发', persona: 'bargain', port: 'Gdansk', fullContainer: true, cert: 'LFGB', notes: '预算紧，会问 201。', productId: PRODUCT_201 },
   { id: 'c-fr', name: 'Atelier Cuisine SAS', country: '法国', city: 'Lyon', channel: '餐饮供应', persona: 'ddp', port: 'Le Havre', fullContainer: true, cert: 'LFGB', notes: '习惯问门口价。' },
   { id: 'c-es', name: 'Iberia Hogar S.L.', country: '西班牙', city: 'Barcelona', channel: '零售进口', persona: 'small', port: 'Barcelona', fullContainer: false, cert: 'LFGB', notes: '先 1500 套试铺。' },
   { id: 'c-it', name: 'Cucina Nord srl', country: '意大利', city: 'Milan', channel: '酒店用品', persona: 'cert_lfgb', port: 'Genoa', fullContainer: true, cert: 'LFGB', notes: '要英文报告。' },
@@ -54,6 +84,7 @@ export function createSeed() {
       fobPort: 'Ningbo',
       cifPort: 'Hamburg',
     },
+    simDate: todayISO(),
     customers,
     products: [
       {
@@ -67,6 +98,7 @@ export function createSeed() {
         moq: 1200,
         cert: 'LFGB / EU 1935/2004（按货号）',
       },
+      ...EXTRA_PRODUCTS,
     ],
     factories: [
       {
@@ -93,6 +125,7 @@ export function createSeed() {
         recommended: false,
         notes: '表价更低。报告可能套用，15 天多半是 201 或旧盒。德国大货不建议做主供。',
       },
+      ...EXTRA_FACTORIES,
     ],
     inquiries,
     quotes: [],
@@ -120,7 +153,7 @@ export function buildInquiry(customer, id = `i-${customer.id}-${Date.now()}`) {
   return {
     id,
     customerId: customer.id,
-    productId: PRODUCT_ID,
+    productId: customer.productId || PRODUCT_ID,
     qty,
     qtyLabel: full ? `1 × 40HQ（约 17,800 套）` : '1,200 套（不足一柜）',
     fullContainer: full,
@@ -233,7 +266,20 @@ export function todayISO() {
 }
 
 export function addDaysISO(days) {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
+  return addDaysFrom(todayISO(), days)
+}
+
+export function addDaysFrom(iso, days) {
+  const d = new Date(`${iso}T12:00:00`)
+  d.setDate(d.getDate() + Number(days || 0))
   return d.toISOString().slice(0, 10)
+}
+
+export function ensureCatalog(state) {
+  if (!state.simDate) state.simDate = todayISO()
+  const haveP = new Set((state.products || []).map((p) => p.id))
+  for (const p of EXTRA_PRODUCTS) if (!haveP.has(p.id)) state.products.push(p)
+  const haveF = new Set((state.factories || []).map((f) => f.id))
+  for (const f of EXTRA_FACTORIES) if (!haveF.has(f.id)) state.factories.push(f)
+  return state
 }

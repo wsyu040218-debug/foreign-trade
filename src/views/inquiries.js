@@ -7,6 +7,7 @@ import {
   addFollowup,
   createPI,
   createQuote,
+  markDepositReceived,
   factoriesForProduct,
   getCustomer,
   getFactory,
@@ -18,27 +19,29 @@ import {
   saveNegotiation,
   saveReply,
   saveState,
+  sendSample,
+  setInquiryProduct,
   spawnInquiry,
   updateQuote,
 } from '../store.js'
 
 function nextDo(inquiry, clarified, quote) {
   if (inquiry.status === 'closed') {
-    return { title: '这票已经收齐关档', body: '尾款到了。去「履约」看复盘打分，再开下一封询盘。' }
+    return { title: '这票已经收齐关档', body: '尾款到了。去「排产」看复盘对错表，再开下一封询盘。' }
   }
   if (inquiry.status === 'bl_out') {
-    return { title: '提单副本已出，等 70% 尾款', body: '去「履约」点「尾款已到账」。不要再出一张 PI。' }
+    return { title: '提单副本已出，等 70% 尾款', body: '去「排产」点「尾款已到账」。不要再出一张 PI。' }
   }
   if (inquiry.status === 'docs_ready') {
-    return { title: '商业发票和装箱单已出', body: '去「履约」点「提单副本已出」，对方才会付尾款。' }
+    return { title: '商业发票和装箱单已出', body: '去「排产」点「提单副本已出」，对方才会付尾款。' }
   }
   if (inquiry.status === 'in_production') {
-    return { title: '定金到了，正在排产', body: '去顶部「履约」，按 PI 出商业发票和装箱单。' }
+    return { title: '定金到了，正在排产', body: '去顶部「排产」，先确认彩盒，再按 PI 出 CI / PL。' }
   }
   if (inquiry.piId) {
     return {
-      title: '这票已经出了形式发票',
-      body: '去左侧「报价和形式发票」，核对接不接得上：总价、30% 定金、港口。定金是对着发票付的，不是先收款再开票。',
+      title: '对方按票打定金，钱到了再开工',
+      body: '往下看「这票的价」。总价和 30% 定金在那里。买家信里会说打定金。钱到了点「定金已到，安排生产」。',
     }
   }
   if (inquiry.status === 'won') {
@@ -63,6 +66,25 @@ function nextDo(inquiry, clarified, quote) {
     title: '先问清楚，先不要报死价',
     body: '看左边买家英文，下面有中文。想好要问什么，点灰色按钮会生成英文，再点「发给买家」。他回了才能填单价。',
   }
+}
+
+function moneyBoard(inquiry, quote, state) {
+  const unit = quote.sellCif != null ? Number(quote.sellCif) : Number(quote.sellFob)
+  const amount = Number(inquiry.qty) * unit
+  const deposit = Math.round(amount * 0.3 * 100) / 100
+  const balance = Math.round((amount - deposit) * 100) / 100
+  const term = quote.sellCif != null ? `CIF ${quote.cifPort}` : `FOB ${quote.fobPort}`
+  return `
+    <article class="panel">
+      <h3>这票的价（给你看的）</h3>
+      <p class="field-help">套单价 × 数量 = 总价。对方先打总价的 30%，剩下 70% 等提单副本。</p>
+      <div class="metrics">
+        <div><span>套单价 ${escapeHtml(term)}</span><b>${money(unit)}</b></div>
+        <div><span>总价 ${escapeHtml(inquiry.qtyLabel)}</span><b>USD ${amount.toFixed(2)}</b></div>
+        <div><span>要收的 30% 定金</span><b>USD ${deposit.toFixed(2)}</b></div>
+      </div>
+      <p class="hint">尾款 70% = USD ${balance.toFixed(2)}。先出形式发票，再收款，再安排生产。</p>
+    </article>`
 }
 
 function scoreBlock(inquiry, quote) {
@@ -179,7 +201,7 @@ export function renderInquiryDetail(state, id) {
       <div>
         <p class="crumb"><a href="#/inquiries">买家来信</a></p>
         <h2>${escapeHtml(customer.name)}</h2>
-        <p class="sub">${escapeHtml(customer.country)} · ${escapeHtml(PERSONA_LABEL[customer.persona] || '')} · ${escapeHtml(inquiry.qtyLabel)} · ${inquiry.ghosted && !inquiry.piId ? '<span class="badge badge-lost">已读未回</span>' : inquiryBadge(inquiry)}</p>
+        <p class="sub">${escapeHtml(customer.country)} · ${escapeHtml(PERSONA_LABEL[customer.persona] || '')} · ${escapeHtml(inquiry.qtyLabel)} · ${escapeHtml(product.sku)} · ${inquiry.ghosted && !inquiry.piId ? '<span class="badge badge-lost">已读未回</span>' : inquiryBadge(inquiry)}</p>
         <p class="en-line" translate="no">${escapeHtml(inquiry.subject)}</p>
       </div>
       <button type="button" class="ghost" data-toggle-zh>${showZh ? '只看英文' : '对照中文'}</button>
@@ -243,7 +265,18 @@ export function renderInquiryDetail(state, id) {
         <tr><th>要多少</th><td>${escapeHtml(inquiry.qtyLabel)}</td></tr>
         <tr><th>港口</th><td>我们宁波上船；他要到 ${escapeHtml(inquiry.destPort)}</td></tr>
         <tr><th>认证</th><td>${escapeHtml(customer.cert)}，要本货号报告</td></tr>
-        <tr><th>货号</th><td>${escapeHtml(product.sku)}　${escapeHtml(product.name)}</td></tr>
+        <tr><th>货号</th><td>
+          ${
+            inquiry.piId
+              ? `${escapeHtml(product.sku)}　${escapeHtml(product.name)}`
+              : `<select data-pick-product="${inquiry.id}">${state.products
+                  .map(
+                    (p) =>
+                      `<option value="${p.id}" ${p.id === inquiry.productId ? 'selected' : ''}>${escapeHtml(p.sku)} · ${escapeHtml(p.name)}</option>`,
+                  )
+                  .join('')}</select>`
+          }
+        </td></tr>
       </table>
       <p class="tags">${(inquiry.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</p>
     </article>
@@ -283,6 +316,8 @@ export function renderInquiryDetail(state, id) {
           : ''
       }
     </section>
+
+    ${quote ? moneyBoard(inquiry, quote, state) : ''}
 
     <article class="panel">
       <h3>卖给买家的价</h3>
@@ -332,13 +367,17 @@ export function renderInquiryDetail(state, id) {
 
     <div class="actions">
       <button type="button" class="btn" data-make-pi="${inquiry.id}" ${inquiry.status === 'won' && quote && !inquiry.piId ? '' : 'disabled'}>生成形式发票</button>
+      <button type="button" class="ghost" data-sample="${inquiry.id}" ${inquiry.sampleSent ? 'disabled' : ''}>寄 2 套样品（到付）</button>
       <button type="button" class="ghost" data-follow="${inquiry.id}">三天后提醒我跟进</button>
-      ${inquiry.piId ? `<a class="ghost" href="#/quotes">去看形式发票</a>` : ''}
-      ${['in_production', 'docs_ready', 'bl_out', 'closed'].includes(inquiry.status) ? `<a class="btn" href="#/ship">去履约</a>` : ''}
+      ${inquiry.piId && inquiry.status === 'pi_issued' ? `<button type="button" class="btn" data-take-deposit="${inquiry.piId}">定金已到，安排生产</button>` : ''}
+      ${inquiry.piId ? `<a class="ghost" href="#/quotes">去看形式发票全文</a>` : ''}
+      ${['in_production', 'docs_ready', 'bl_out', 'closed'].includes(inquiry.status) ? `<a class="btn" href="#/ship">去排产</a>` : ''}
     </div>
     <p class="field-help">${
-      inquiry.piId
-        ? '形式发票已出。买方按发票付 30% 定金后才开工。'
+      inquiry.status === 'in_production'
+        ? '定金已记到账，工厂可以开工。顶部点「排产」。'
+        : inquiry.piId
+        ? '形式发票已发给对方。等他说打定金，钱到了点「定金已到，安排生产」。'
         : inquiry.status === 'won'
           ? '对方说请出形式发票了，点上面的绿色按钮。'
           : quote
@@ -354,6 +393,17 @@ export function bindInquiryDetail(state, id, renderApp) {
   if (inquiry.unread) markRead(state, inquiry.id)
   const product = getProduct(state, inquiry.productId)
   const customer = getCustomer(state, inquiry.customerId)
+
+  document.querySelector('[data-pick-product]')?.addEventListener('change', (e) => {
+    setInquiryProduct(state, inquiry.id, e.target.value)
+    renderApp()
+  })
+
+  document.querySelector('[data-sample]')?.addEventListener('click', () => {
+    sendSample(state, inquiry.id)
+    renderApp()
+    document.querySelector('.thread')?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  })
 
   document.querySelectorAll('[data-pick-factory]').forEach((el) => {
     el.addEventListener('change', () => {
@@ -526,7 +576,14 @@ export function bindInquiryDetail(state, id, renderApp) {
       return
     }
     createPI(state, inquiry.quoteId)
-    location.hash = '#/quotes'
+    renderApp()
+    document.querySelector('.thread')?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  })
+
+  document.querySelector('[data-take-deposit]')?.addEventListener('click', () => {
+    markDepositReceived(state, inquiry.piId)
+    location.hash = '#/ship'
+    renderApp()
   })
 
   document.querySelector('[data-follow]')?.addEventListener('click', () => {

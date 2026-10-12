@@ -5,8 +5,8 @@ export function renderQuotes(state) {
   return `
     <header class="page-head">
       <div>
-        <h2>报价和形式发票</h2>
-        <p class="sub">形式发票（PI）是给对方打 30% 定金用的。先出票，再收款。复制前用清单对一遍。</p>
+        <h2>看价和形式发票</h2>
+        <p class="sub">这里看总价和 30% 定金。对方按这张票打钱。钱到了回到来信点「定金已到，安排生产」，或下面直接点。</p>
       </div>
     </header>
     ${
@@ -104,7 +104,43 @@ Not DDP.`
       <div><span>定金 30%</span><b>USD ${deposit.toFixed(2)}</b></div>
       <div><span>尾款 70%</span><b>USD ${balance.toFixed(2)}</b></div>
     </div>
-    <pre class="letter" translate="no">${escapeHtml(text)}</pre>
+    <div class="pi-paper" translate="no">
+      <header class="pi-head">
+        <div>
+          <strong>PROFORMA INVOICE</strong>
+          <p>Seller: Your trading desk, Ningbo, China</p>
+        </div>
+        <div class="pi-meta">
+          <p>No. ${escapeHtml(p.id)}</p>
+          <p>Date: ${escapeHtml((p.createdAt || '').slice(0, 10))}</p>
+        </div>
+      </header>
+      <table class="pi-parties">
+        <tr>
+          <th>Seller</th>
+          <th>Buyer</th>
+        </tr>
+        <tr>
+          <td>Your trading desk<br />Ningbo, China<br />FOB port: ${escapeHtml(p.fobPort)}</td>
+          <td>${escapeHtml(customer?.name || '')}<br />${escapeHtml(inquiry?.destPort || '')}</td>
+        </tr>
+      </table>
+      <table class="pi-lines">
+        <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Amount</th></tr>
+        <tr>
+          <td>${escapeHtml(product?.sku)} ${escapeHtml(product?.name)}</td>
+          <td>${escapeHtml(String(p.qty))} sets<br />${escapeHtml(p.qtyLabel)}</td>
+          <td>${money(unit)} ${escapeHtml(term)}</td>
+          <td>USD ${amount.toFixed(2)}</td>
+        </tr>
+      </table>
+      <p>Deposit 30% T/T: USD ${deposit.toFixed(2)} against this PI<br />Balance 70% T/T: USD ${balance.toFixed(2)} against copy of B/L<br />Lead time: ${p.leadDays} days after deposit and artwork confirmed<br />Packing: ${escapeHtml(p.packing)}<br />Documents: CI, PL, B/L, food-contact report copy<br />Not DDP.</p>
+      <div class="pi-sign">
+        <div>Seller signature / stamp</div>
+        <div>Buyer confirmation</div>
+      </div>
+    </div>
+    <pre class="letter hidden-copy" translate="no">${escapeHtml(text)}</pre>
     <form class="form nego-form" data-pi-checks="${p.id}">
       <p class="hint">复制前自己对票。系统只拦 CIF/FOB，拦不住写错港口或数量。</p>
       <div class="check-grid">
@@ -121,7 +157,7 @@ Not DDP.`
         ${
           p.status === 'awaiting_deposit'
             ? `<button type="button" class="btn" data-deposit="${p.id}">定金已到账</button>`
-            : `<a class="btn" href="#/ship">去履约：出单据和收尾款</a>`
+            : `<a class="btn" href="#/ship">去排产：彩盒、单据、尾款</a>`
         }
       </div>
     </form>

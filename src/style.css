@@ -422,6 +422,62 @@ body {
   font-size: 12px;
 }
 
+.hidden-copy { position: absolute; left: -9999px; height: 1px; overflow: hidden; }
+
+.pi-paper {
+  background: #fff;
+  border: 1px solid #1f2937;
+  padding: 20px 22px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #111;
+}
+
+.pi-head, .pi-sign {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.pi-head strong { font-size: 18px; letter-spacing: 0.04em; }
+.pi-head p, .pi-meta p { margin: 0; color: #444; }
+.pi-parties, .pi-lines { width: 100%; border-collapse: collapse; margin: 10px 0 14px; }
+.pi-parties th, .pi-parties td, .pi-lines th, .pi-lines td {
+  border: 1px solid #d4d4d4;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.pi-sign div {
+  flex: 1;
+  min-height: 64px;
+  border-top: 1px solid #999;
+  padding-top: 8px;
+  color: #555;
+}
+
+.cal {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.cal li {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cal li.is-on {
+  border-style: solid;
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
 .letter {
   white-space: pre-wrap;
   font-size: 13px;

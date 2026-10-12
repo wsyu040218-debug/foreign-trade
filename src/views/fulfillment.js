@@ -2,6 +2,8 @@ import { escapeHtml, money, statusBadge } from '../dom.js'
 import { scoreDeal } from '../score.js'
 import { addDaysISO } from '../seed.js'
 import {
+  clockDate,
+  confirmArtwork,
   getCustomer,
   getInquiry,
   getProduct,
@@ -16,13 +18,13 @@ export function renderFulfillment(state) {
   return `
     <header class="page-head">
       <div>
-        <h2>履约</h2>
-        <p class="sub">定金到了才开工。出商业发票和装箱单，再出提单副本，对方付 70% 尾款后关档。</p>
+        <h2>排产</h2>
+        <p class="sub">交期从定金 + 彩盒确认起算。先确认彩盒，再按 PI 出 CI / PL，提单副本后收 70% 关档。练习日 ${escapeHtml(clockDate(state))}。</p>
       </div>
     </header>
     ${
       list.length === 0
-        ? '<p class="empty">还没有排产。先在「报价」页把某票的 30% 定金记到账。</p>'
+        ? '<p class="empty">还没有开工。先在来信里出形式发票，等买家打定金，再点「定金已到，安排生产」。</p>'
         : `<section class="stack">${list.map((s) => shipCard(state, s)).join('')}</section>`
     }
   `
@@ -53,7 +55,7 @@ function shipCard(state, s) {
     <div class="panel-head">
       <div>
         <h3>${escapeHtml(customer?.name || '')}</h3>
-        <p class="sub">${escapeHtml(pi.qtyLabel)} · 交期约至 ${escapeHtml(ready)}</p>
+        <p class="sub">${escapeHtml(pi.qtyLabel)} · ${escapeHtml(product?.sku || '')} · ${s.artworkOn ? `交期约至 ${escapeHtml(ready)}` : '彩盒未确认，交期未起算'}</p>
       </div>
       ${statusBadge(s.status)}
     </div>
@@ -64,13 +66,29 @@ function shipCard(state, s) {
     </div>
     <p class="field-help">货号 ${escapeHtml(product?.sku || '')} · 约 ${cartons.toLocaleString()} 箱 · ${escapeHtml(a.term)}</p>
 
+    <ol class="cal">
+      <li class="${s.depositOn ? 'is-on' : ''}">定金日 ${escapeHtml(s.depositOn || '—')}</li>
+      <li class="${s.artworkOn ? 'is-on' : ''}">彩盒确认 ${escapeHtml(s.artworkOn || '未确认')}</li>
+      <li class="${s.readyDate ? 'is-on' : ''}">交期 ${escapeHtml(s.readyDate || `定金+彩盒后再加 ${pi.leadDays} 天`)}</li>
+    </ol>
+
     ${
-      s.status === 'in_production'
+      s.status === 'in_production' && !s.artworkOn
+        ? `<div class="actions">
+            <button type="button" class="btn" data-artwork="${s.id}">确认彩盒，开始起算交期</button>
+            <a class="ghost" href="#/inquiries/${inquiry.id}">回询盘</a>
+          </div>
+          <p class="hint">交期从定金和彩盒都确认的那天起算，不是只从定金日。</p>`
+        : ''
+    }
+
+    ${
+      s.status === 'in_production' && s.artworkOn
         ? `<div class="actions">
             <button type="button" class="btn" data-issue-docs="${s.id}">出具商业发票和装箱单</button>
             <a class="ghost" href="#/inquiries/${inquiry.id}">回询盘</a>
           </div>
-          <p class="hint">彩盒已按定金日确认。点上面按钮，按 PI 数量出 CI / PL。</p>`
+          <p class="hint">数量和港口从 PI 带出。点上面按钮出 CI / PL。</p>`
         : ''
     }
 
@@ -107,7 +125,7 @@ function shipCard(state, s) {
 
     ${
       s.status === 'closed'
-        ? `<p class="hint">尾款已到。这票可以关档，下一票再开询盘。</p>`
+        ? `<p class="hint">已收齐 / 可关档。去看下面复盘对错表，再开下一封询盘。</p>`
         : ''
     }
 
@@ -126,6 +144,12 @@ function shipCard(state, s) {
 }
 
 export function bindFulfillment(state, renderApp) {
+  document.querySelectorAll('[data-artwork]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      confirmArtwork(state, btn.getAttribute('data-artwork'))
+      renderApp()
+    })
+  })
   document.querySelectorAll('[data-issue-docs]').forEach((btn) => {
     btn.addEventListener('click', () => {
       issueDocs(state, btn.getAttribute('data-issue-docs'))

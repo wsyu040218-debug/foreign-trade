@@ -1,5 +1,5 @@
 import { applyBuyerDecision, decideBuyerReply } from './buyer-sim.js'
-import { addDaysISO, buildInquiry, createSeed } from './seed.js'
+import { addDaysFrom, buildInquiry, createSeed, ensureCatalog, todayISO } from './seed.js'
 
 const KEY = 'ft-workbench-v2'
 
@@ -17,6 +17,7 @@ export function loadState() {
     }
     const data = JSON.parse(raw)
     if (!Array.isArray(data.shipments)) data.shipments = []
+    ensureCatalog(data)
     backfillShipments(data)
     return data
   } catch {
@@ -56,6 +57,14 @@ export function getQuote(state, id) {
   return state.quotes.find((q) => q.id === id)
 }
 
+export function setInquiryProduct(state, inquiryId, productId) {
+  const inquiry = getInquiry(state, inquiryId)
+  if (!inquiry || inquiry.piId) return
+  inquiry.productId = productId
+  inquiry.factoryId = null
+  saveState(state)
+}
+
 export function factoriesForProduct(state, productId) {
   return state.factories.filter((f) => f.productId === productId)
 }
@@ -87,7 +96,9 @@ function backfillShipments(state) {
       inquiryId: pi.inquiryId,
       customerId: pi.customerId,
       status: closed ? 'closed' : inquiry?.status === 'bl_out' ? 'bl_out' : inquiry?.status === 'docs_ready' ? 'docs_ready' : 'in_production',
-      readyDate: addDaysISO(pi.leadDays || 30),
+      depositOn: clockDate(state),
+      artworkOn: '',
+      readyDate: '',
       ci: '',
       pl: '',
       createdAt: pi.createdAt || new Date().toISOString(),
@@ -110,7 +121,9 @@ export function markDepositReceived(state, piId) {
       inquiryId: pi.inquiryId,
       customerId: pi.customerId,
       status: 'in_production',
-      readyDate: addDaysISO(pi.leadDays || 30),
+      depositOn: clockDate(state),
+      artworkOn: '',
+      readyDate: '',
       ci: '',
       pl: '',
       createdAt: new Date().toISOString(),
@@ -129,9 +142,67 @@ export function getShipment(state, id) {
   return (state.shipments || []).find((s) => s.id === id)
 }
 
+export function clockDate(state) {
+  return state.simDate || todayISO()
+}
+
+export function confirmArtwork(state, shipmentId) {
+  const s = getShipment(state, shipmentId)
+  const pi = state.pis.find((p) => p.id === s?.piId)
+  if (!s || !pi || s.status !== 'in_production') return
+  s.artworkOn = clockDate(state)
+  s.readyDate = addDaysFrom(s.artworkOn, pi.leadDays || 30)
+  saveState(state)
+}
+
+export function sendSample(state, inquiryId) {
+  const inquiry = getInquiry(state, inquiryId)
+  const customer = getCustomer(state, inquiry?.customerId)
+  if (!inquiry || !customer) return
+  inquiry.sampleSent = true
+  inquiry.messages = inquiry.messages || []
+  inquiry.messages.push({
+    at: new Date().toISOString(),
+    from: 'you',
+    text: `We will send 2 sets to ${customer.city} by courier, freight collect. Please share the receiving address.`,
+    textZh: `我们寄 2 套样品到 ${customer.city}，运费到付。请给收件地址。`,
+  })
+  inquiry.unread = true
+  inquiry.messages.push({
+    at: new Date().toISOString(),
+    from: 'buyer',
+    text: `OK, freight collect is fine. Address will follow. We will not book a container before we see the 2 sets.`,
+    textZh: `到付可以。地址随后发。没看到这 2 套我们不下柜。`,
+  })
+  saveState(state)
+}
+
+export function advanceClock(state) {
+  state.simDate = addDaysFrom(clockDate(state), 1)
+  const today = state.simDate
+  for (const inquiry of state.inquiries || []) {
+    if (!inquiry.ghosted || inquiry.piId) continue
+    inquiry.ghosted = false
+    inquiry.unread = true
+    inquiry.messages = inquiry.messages || []
+    inquiry.messages.push({
+      at: new Date().toISOString(),
+      from: 'buyer',
+      text: `Sorry for the delay. We are still here. Please follow up on quantity / price.`,
+      textZh: `抱歉回晚了。我们还在。数量和价格请再跟一下。`,
+    })
+  }
+  for (const f of state.followups || []) {
+    if (!f.done && f.due && f.due <= today) {
+      f.note = `${f.note || ''}（已到 ${today}）`
+    }
+  }
+  saveState(state)
+}
+
 export function issueDocs(state, shipmentId) {
   const s = getShipment(state, shipmentId)
-  if (!s || s.status !== 'in_production') return
+  if (!s || s.status !== 'in_production' || !s.artworkOn) return
   const pi = state.pis.find((p) => p.id === s.piId)
   const inquiry = getInquiry(state, s.inquiryId)
   const customer = getCustomer(state, s.customerId)
@@ -401,6 +472,23 @@ export function createPI(state, quoteId) {
   if (inquiry) {
     inquiry.piId = id
     inquiry.status = 'pi_issued'
+    const unit = pi.sellCif != null ? Number(pi.sellCif) : Number(pi.sellFob)
+    const amount = Number(pi.qty) * unit
+    const deposit = Math.round(amount * 0.3 * 100) / 100
+    inquiry.messages = inquiry.messages || []
+    inquiry.messages.push({
+      at: new Date().toISOString(),
+      from: 'you',
+      text: `PI ${id} issued. Please remit 30% T/T USD ${deposit.toFixed(2)} against this PI.`,
+      textZh: `形式发票 ${id} 已出。请按这张票电汇 30% 定金 USD ${deposit.toFixed(2)}。`,
+    })
+    inquiry.unread = true
+    inquiry.messages.push({
+      at: new Date().toISOString(),
+      from: 'buyer',
+      text: `PI received. Accounts will send 30% deposit USD ${deposit.toFixed(2)} today. Please start production after it lands.`,
+      textZh: `形式发票收到了。财务今天打 30% 定金 USD ${deposit.toFixed(2)}。钱到了请安排生产。`,
+    })
   }
   saveState(state)
   return pi
@@ -412,7 +500,7 @@ export function addFollowup(state, { customerId, inquiryId, day, note }) {
     customerId,
     inquiryId,
     day,
-    due: addDaysISO(day === 0 ? 0 : day),
+    due: addDaysFrom(clockDate(state), day === 0 ? 0 : day),
     done: false,
     note,
   }

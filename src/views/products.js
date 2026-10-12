@@ -9,15 +9,22 @@ export function renderProducts(state) {
     <header class="page-head">
       <div>
         <h2>产品与成本</h2>
-        <p class="sub">改 EXW / 海运后，未锁定的报价在询盘页重算。已出 PI 的报价不会被改价覆盖。</p>
+        <p class="sub">主货号 KS-304-6。对照货号 KS-201-6 只能练差价，不要当德国大货主供。改 EXW / 海运后，未锁定报价会重算。</p>
       </div>
     </header>
-    <article class="panel">
-      <h3>${escapeHtml(product.sku)} ${escapeHtml(product.name)}</h3>
-      <p>${escapeHtml(product.material)}</p>
-      <p>${escapeHtml(product.packing)}</p>
-      <p>MOQ ${product.moq} · ${escapeHtml(product.cert)} · 约 ${cap.toLocaleString()} 套 / 40HQ</p>
-    </article>
+    <section class="grid-2">
+      ${state.products
+        .map((p) => {
+          const n = setsPer40hq(p.cbmPerSet, state.shipping.usableCbm)
+          return `<article class="panel">
+            <h3>${escapeHtml(p.sku)} ${escapeHtml(p.name)}</h3>
+            <p>${escapeHtml(p.material)}</p>
+            <p>${escapeHtml(p.packing)}</p>
+            <p>MOQ ${p.moq} · ${escapeHtml(p.cert)} · 约 ${n.toLocaleString()} 套 / 40HQ</p>
+          </article>`
+        })
+        .join('')}
+    </section>
     <article class="panel">
       <h3>运费参数</h3>
       <form class="form inline" data-ship>
@@ -39,8 +46,8 @@ export function renderProducts(state) {
             docsPerSet: f.docsPerSet,
             oceanPer40hq: state.shipping.oceanPer40hq,
             insuranceRate: state.shipping.insuranceRate,
-            qty: cap,
-            cbmPerSet: product.cbmPerSet,
+            qty: setsPer40hq((state.products.find((p) => p.id === f.productId) || product).cbmPerSet, state.shipping.usableCbm),
+            cbmPerSet: (state.products.find((p) => p.id === f.productId) || product).cbmPerSet,
             usableCbm: state.shipping.usableCbm,
             forceFullContainer: true,
           })
